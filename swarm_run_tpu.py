@@ -1,34 +1,39 @@
 import functools
 import multiprocessing
+import os
+import socket
 
 import optax
 import ray
 
 from loader import TextLoader
-from ray_tpu import start_ray, get_connection, create_tpu, wait_til
+from ray_tpu import start_ray, get_connection, create_tpu, wait_til, delete_tpu
 from swarm_jax.model import SwarmCharTransformerBig
 from swarm_jax.swarm import Swarm
 from swarm_jax.swarm_layer import NetworkPrecision
 
-tpus = 8
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
+tpus = 2
+region = "us-central1-f"
+#
 # for i in range(tpus):
-#     delete_tpu(f"swarm-jax-test-{i}", "europe-west4-a")
+#     delete_tpu(f"swarm-jax-test-{i}", region)
 #
 # exit()
 
-head_info = ray.init(dashboard_host="0.0.0.0")
-address = head_info['redis_address']
+ctx = ray.init()
+address = ctx.address_info['gcs_address']
 
 conns = []
 for i in range(tpus):
-    create_tpu(f"swarm-jax-test-{i}", "europe-west4-a", "v3-8", False)
+    create_tpu(f"swarm-jax-test-{i}", region, "v2-8", True)
 
 for i in range(tpus):
-    assert wait_til(f"swarm-jax-test-{i}", "europe-west4-a", {'state': 'READY', 'health': 'HEALTHY'})
+    assert wait_til(f"swarm-jax-test-{i}", region, {'state': 'READY'})
 
 for i in range(tpus):
-    conns += get_connection(f"swarm-jax-test-{i}", "europe-west4-a")
+    conns += get_connection(f"swarm-jax-test-{i}", region)
 
 with multiprocessing.Pool(processes=tpus) as p:
     p.map(functools.partial(start_ray, address=address), conns)

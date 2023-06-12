@@ -34,10 +34,11 @@ def create_tpu(
         ('node_id', name),
     )
 
+    runtime_version = 'tpu-vm-tf-2.12.0'
     data = {"accelerator_type":
                 type,
             "runtime_version":
-                'v2-alpha',
+                runtime_version,
             "network_config":
                 {"enable_external_ips": True},
             }
@@ -45,7 +46,7 @@ def create_tpu(
     if preemptible:
         data["schedulingConfig"] = {"preemptible": True}
 
-    response = requests.post(f'https://tpu.googleapis.com/v2alpha1/projects/{get_project()}/locations/{zone}/nodes',
+    response = requests.post(f'https://tpu.googleapis.com/v2/projects/{get_project()}/locations/{zone}/nodes',
                              headers=headers, params=params, json=data)
 
     print(response.json())
@@ -59,7 +60,7 @@ def check_tpu(name, zone):
     }
 
     response = requests.get(
-        f'https://tpu.googleapis.com/v2alpha1/projects/{get_project()}/locations/{zone}/nodes/{name}',
+        f'https://tpu.googleapis.com/v2/projects/{get_project()}/locations/{zone}/nodes/{name}',
         headers=headers)
 
     return response.json()
@@ -71,7 +72,7 @@ def delete_tpu(name, zone):
     }
 
     response = requests.delete(
-        f'https://tpu.googleapis.com/v2alpha1/projects/{get_project()}/locations/{zone}/nodes/{name}',
+        f'https://tpu.googleapis.com/v2/projects/{get_project()}/locations/{zone}/nodes/{name}',
         headers=headers)
 
     return response.json()
@@ -100,7 +101,7 @@ def wait_til(name, zone, state):
         if matches:
             return True
 
-        time.sleep(1)
+        time.sleep(5)
 
 
 def get_connection(
@@ -135,8 +136,10 @@ def start_ray(conn, address):
     conn.put("scripts/init_ray.sh", "/tmp/ray-tpu.sh")
     print(conn.sudo('chmod +x /tmp/ray-tpu.sh'))
     print(conn.sudo('/tmp/ray-tpu.sh'))
+    print(conn.sudo('echo "JAX_PLATFORMS=\'\'" | sudo tee -a /etc/environment'))
+    print(conn.sudo('echo "XLA_FLAGS=\'--xla_force_host_platform_device_count=8\'" | sudo tee -a /etc/environment'))
     try:
         print(conn.run('ray stop -f'))
     except:
         pass
-    print(conn.run(f"ray start --address={address} --load-code-from-local --resources='" + '{"tpu": 1}\''))
+    print(conn.run(f"ray start --address={address} --resources='" + '{"tpu": 8}\''))
